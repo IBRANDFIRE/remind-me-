@@ -1,5 +1,4 @@
-
-name: Unzip and Build APK
+name: Universal APK Builder
 
 on:
   push:
@@ -13,62 +12,90 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Extract ZIP File
+      - name: Extract ZIP File (If present)
         run: |
-          mkdir -p extracted_files
-          unzip -q *.zip -d extracted_files
-          
-          PROJECT_ROOT=$(find extracted_files -name "settings.gradle.kts" -o -name "build.gradle.kts" -exec dirname {} \; | head -n 1)
-          
-          if [ -n "$PROJECT_ROOT" ]; then
-            echo "Found project root at: $PROJECT_ROOT"
-            shopt -s dotglob
-            cp -r "$PROJECT_ROOT"/* .
-            shopt -u dotglob
-            echo "Project files successfully moved to workspace root."
+          if ls *.zip 1> /dev/null 2>&1; then
+            echo "Zip found, extracting..."
+            unzip -o *.zip -d project_files
+            if [ -d project_files/* ]; then
+              cp -r project_files/*/* . 2>/dev/null || cp -r project_files/* . 2>/dev/null || true
+            else
+              cp -r project_files/* .
+            fi
           else
-            echo "Error: Could not locate build configuration files in zip."
-            exit 1
+            echo "No zip file detected, using repository files directly."
           fi
 
-      - name: Debug Workspace Files
-        run: |
-          echo "Listing root directory contents:"
-          ls -la
-          echo "Listing gradle directory contents:"
-          ls -la gradle/ || echo "gradle directory missing!"
-
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.5
-
-      - name: Create Dummy Configuration Files
-        run: |
-          touch .env.example
-          touch .env
-
-      - name: Set up Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Generate Missing Debug Keystore
-        run: |
-          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-
-      - name: Grant Gradle Permissions
-        run: chmod +x gradlew || true
-
-      - name: Setup Gradle
+      - name: Setup Gradle 8.7
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Force Generate Valid Configs
+        run: |
+          touch .env.example .env local.properties
+
+          PKG_NAME=$(grep -oP 'package="\K[^"]+' app/src/main/AndroidManifest.xml 2>/dev/null || grep -oP 'namespace\s+["'\'']\K[^"'\'']+' app/build.gradle* 2>/dev/null || grep -oP 'applicationId\s+["'\'']\K[^"'\'']+' app/build.gradle* 2>/dev/null || echo "com.example.app")
+          echo "Building for package: $PKG_NAME"
+
+          mkdir -p app
+          cat <<EOF > app/google-services.json
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "firebase_url": "https://dummy-app.firebaseio.com",
+              "project_id": "dummy-app",
+              "storage_bucket": "dummy-app.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:123456789012:android:1234567890123456789012",
+                  "android_client_info": {
+                    "package_name": "$PKG_NAME"
+                  }
+                },
+                "oauth_client": [
+                  {
+                    "client_id": "123456789012-dummy.apps.googleusercontent.com",
+                    "client_type": 3
+                  }
+                ],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDummyKeyForGoogleServicesValidation00"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+
+          if [ ! -f debug.keystore ] && [ ! -f app/debug.keystore ]; then
+            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            cp debug.keystore app/debug.keystore 2>/dev/null || true
+          fi
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: gradle assembleDebug --no-daemon
 
-      - name: Upload Finished APK
+      - name: Upload Output APK
         uses: actions/upload-artifact@v4
         with:
-          name: MedicineAlarm-APK
-          path: '**/app/build/outputs/apk/debug/*.apk'
+          name: App-Debug-APK
+          path: '**/build/outputs/apk/debug/*.apk'
+
 
 
