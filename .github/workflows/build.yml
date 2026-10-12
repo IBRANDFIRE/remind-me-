@@ -50,5 +50,3 @@ jobs:
         with:
           name: remind me
           path: '**/app/build/outputs/apk/debug/*.apk'
-
-path: .github/workflows/build.yml
