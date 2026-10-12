@@ -17,7 +17,26 @@ jobs:
         run: |
           mkdir -p extracted_files
           unzip -q *.zip -d extracted_files
-          cp -r extracted_files/*/. . 2>/dev/null || cp -r extracted_files/* . 2>/dev/null || true
+          
+          PROJECT_ROOT=$(find extracted_files -name "settings.gradle.kts" -o -name "build.gradle.kts" -exec dirname {} \; | head -n 1)
+          
+          if [ -n "$PROJECT_ROOT" ]; then
+            echo "Found project root at: $PROJECT_ROOT"
+            shopt -s dotglob
+            cp -r "$PROJECT_ROOT"/* .
+            shopt -u dotglob
+            echo "Project files successfully moved to workspace root."
+          else
+            echo "Error: Could not locate build configuration files in zip."
+            exit 1
+          fi
+
+      - name: Debug Workspace Files
+        run: |
+          echo "Listing root directory contents:"
+          ls -la
+          echo "Listing gradle directory contents:"
+          ls -la gradle/ || echo "gradle directory missing!"
 
       - name: Generate Gradle Wrapper
         run: gradle wrapper --gradle-version 8.5
