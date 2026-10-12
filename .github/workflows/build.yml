@@ -23,15 +23,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v6
 
-      - name: Extract and Flatten ZIP Project Files
+      - name: Extract and Locate Project Root
         run: |
           if ls *.zip 1> /dev/null 2>&1; then
             mkdir -p project_files
             unzip -q *.zip -d project_files
-            if [ -d project_files/* ]; then
-              cp -r project_files/*/* . 2>/dev/null || cp -r project_files/* . 2>/dev/null || true
+            PROJECT_DIR=$(find project_files -name "gradlew" -exec dirname {} \;)
+            if [ -n "$PROJECT_DIR" ]; then
+              cp -r "$PROJECT_DIR"/* .
+              cp -r "$PROJECT_DIR"/.[^.]* . 2>/dev/null || true
             else
-              cp -r project_files/* .
+              echo "Error: gradlew not found in zip structure."
+              exit 1
             fi
             rm -rf project_files
           else
@@ -52,7 +55,6 @@ jobs:
 
       - name: Build APK (Debug or Release)
         run: |
-          # Defaults to assembleDebug on push, or uses the manual input choice
           VARIANT="${{ github.event.inputs.build_variant || 'assembleDebug' }}"
           echo "Building variant: $VARIANT"
           ./gradlew "$VARIANT" --no-daemon
@@ -60,7 +62,7 @@ jobs:
       - name: Upload Finished APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: remind me
+          name: Mobile-App-APK
           path: |
             **/app/build/outputs/apk/debug/*.apk
             **/app/build/outputs/apk/release/*.apk
