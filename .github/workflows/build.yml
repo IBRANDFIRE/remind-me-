@@ -43,11 +43,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload Finished APK
         uses: actions/upload-artifact@v4
         with:
           name: remind me
           path: '**/app/build/outputs/apk/debug/*.apk'
+
 
