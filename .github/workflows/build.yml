@@ -1,3 +1,4 @@
+
 name: Professional Android Build
 
 on:
@@ -23,17 +24,30 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v6
 
+      - name: Inspect Zip Contents (Debugging)
+        run: |
+          if ls *.zip 1> /dev/null 2>&1; then
+            echo "--- ZIP CONTENTS ---"
+            unzip -l *.zip
+          else
+            echo "No zip file found."
+          fi
+
       - name: Extract and Locate Project Root
         run: |
           if ls *.zip 1> /dev/null 2>&1; then
             mkdir -p project_files
             unzip -q *.zip -d project_files
-            PROJECT_DIR=$(find project_files -name "gradlew" -exec dirname {} \;)
+            
+            # Find the directory containing settings.gradle or build.gradle
+            PROJECT_DIR=$(find project_files -name "settings.gradle" -o -name "build.gradle" -exec dirname {} \; | head -n 1)
+            
             if [ -n "$PROJECT_DIR" ]; then
+              echo "Found project root at: $PROJECT_DIR"
               cp -r "$PROJECT_DIR"/* .
               cp -r "$PROJECT_DIR"/.[^.]* . 2>/dev/null || true
             else
-              echo "Error: gradlew not found in zip structure."
+              echo "Error: Could not locate Android project files (settings.gradle/build.gradle) in the zip."
               exit 1
             fi
             rm -rf project_files
@@ -62,7 +76,7 @@ jobs:
       - name: Upload Finished APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Mobile-App-APK
+          name: remind me
           path: |
             **/app/build/outputs/apk/debug/*.apk
             **/app/build/outputs/apk/release/*.apk
