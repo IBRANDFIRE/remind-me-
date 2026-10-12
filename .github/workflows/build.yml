@@ -1,83 +1,54 @@
-
-name: Professional Android Build
+name: Unzip and Build APK
 
 on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
-    inputs:
-      build_variant:
-        description: 'Choose build variant'
-        required: true
-        default: 'assembleDebug'
-        type: choice
-        options:
-          - assembleDebug
-          - assembleRelease
 
 jobs:
   build:
-    name: Build Android APK
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      - name: Inspect Zip Contents (Debugging)
+      - name: Extract ZIP File
         run: |
-          if ls *.zip 1> /dev/null 2>&1; then
-            echo "--- ZIP CONTENTS ---"
-            unzip -l *.zip
+          unzip *.zip -d project_files
+          if [ -d project_files/* ]; then
+            cp -r project_files/*/* . 2>/dev/null || cp -r project_files/* . 2>/dev/null || true
           else
-            echo "No zip file found."
+            cp -r project_files/* .
           fi
 
-      - name: Extract and Locate Project Root
+      - name: Create Dummy Configuration Files
         run: |
-          if ls *.zip 1> /dev/null 2>&1; then
-            mkdir -p project_files
-            unzip -q *.zip -d project_files
-            
-            # Find the directory containing settings.gradle or build.gradle
-            PROJECT_DIR=$(find project_files -name "settings.gradle" -o -name "build.gradle" -exec dirname {} \; | head -n 1)
-            
-            if [ -n "$PROJECT_DIR" ]; then
-              echo "Found project root at: $PROJECT_DIR"
-              cp -r "$PROJECT_DIR"/* .
-              cp -r "$PROJECT_DIR"/.[^.]* . 2>/dev/null || true
-            else
-              echo "Error: Could not locate Android project files (settings.gradle/build.gradle) in the zip."
-              exit 1
-            fi
-            rm -rf project_files
-          else
-            echo "No root ZIP file detected, proceeding with standard repository structure."
-          fi
+          touch .env.example
+          touch .env
 
       - name: Set up Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Gradle Cache & Wrapper
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Grant Execute Permission to Gradle Wrapper
-        run: chmod +x ./gradlew
-
-      - name: Build APK (Debug or Release)
+      - name: Generate Missing Debug Keystore
         run: |
-          VARIANT="${{ github.event.inputs.build_variant || 'assembleDebug' }}"
-          echo "Building variant: $VARIANT"
-          ./gradlew "$VARIANT" --no-daemon
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
-      - name: Upload Finished APK Artifact
+      - name: Grant Gradle Permissions
+        run: chmod +x gradlew || true
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build Debug APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload Finished APK
         uses: actions/upload-artifact@v4
         with:
           name: remind me
-          path: |
-            **/app/build/outputs/apk/debug/*.apk
-            **/app/build/outputs/apk/release/*.apk
-          retention-days: 14
+          path: '**/app/build/outputs/apk/debug/*.apk'
+
+path: .github/workflows/build.yml
