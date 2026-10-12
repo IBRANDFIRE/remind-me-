@@ -1,3 +1,4 @@
+
 name: Unzip and Build APK
 
 on:
@@ -14,16 +15,12 @@ jobs:
 
       - name: Extract ZIP File
         run: |
+          mkdir -p extracted_files
           unzip -q *.zip -d extracted_files
-          PROJECT_DIR=$(find extracted_files -name "gradlew" -exec dirname {} \; | head -n 1)
-          if [ -n "$PROJECT_DIR" ]; then
-            cp -r "$PROJECT_DIR"/* .
-            cp -r "$PROJECT_DIR"/.[^.]* . 2>/dev/null || true
-            echo "Successfully extracted and moved project files to root."
-          else
-            echo "Error: gradlew not found inside the ZIP file."
-            exit 1
-          fi
+          cp -r extracted_files/*/. . 2>/dev/null || cp -r extracted_files/* . 2>/dev/null || true
+
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.5
 
       - name: Create Dummy Configuration Files
         run: |
@@ -54,6 +51,5 @@ jobs:
         with:
           name: MedicineAlarm-APK
           path: '**/app/build/outputs/apk/debug/*.apk'
-
 
 
